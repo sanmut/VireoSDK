@@ -353,6 +353,24 @@
             }
         };
 
+        Module.javaScriptInvoke.myTempJS = function (
+            functionNameString
+        ) {
+            var functionToCall = findJavaScriptFunctionToCall(functionNameString);
+            console.log(functionToCall);
+            if (typeof functionToCall === 'function') {
+                console.log(this.name, 'function:yes ', functionToCall.name);
+                var context = undefined;
+                var slicedArgs = Array.prototype.slice.call(arguments, 1);
+                console.log(slicedArgs);
+                var returnValue = functionToCall.apply(context, slicedArgs);
+                console.log(this.name, 'function:yes ', functionToCall.name);
+                return returnValue;
+            }
+            console.log('function:no');
+            return 'none';
+        };
+
         Module.javaScriptInvoke.jsJavaScriptInvoke = function (
             functionNamePointer,
             returnPointer,

@@ -21,6 +21,7 @@ SDG
 namespace Vireo {
 
 #if kVireoOS_emscripten
+#include <emscripten.h>
 extern "C" {
     // JavaScript function prototypes
     // Parameters: functionName, returnValue, parameters*, parametersCount, errorCheckingEnabled, errorStatus*, errorCode*, errorSource*
@@ -97,6 +98,7 @@ VIREO_FUNCTION_SIGNATUREV(JavaScriptInvoke, JavaScriptInvokeParamBlock)
     StaticTypeAndData *returnValuePtr = _ParamImmediate(returnValue);
     StaticTypeAndData *parametersPtr = _ParamImmediate(parameters);
 
+#if false
     if (!errorClusterPtr->status) {
         jsJavaScriptInvoke(
             functionName,
@@ -109,6 +111,33 @@ VIREO_FUNCTION_SIGNATUREV(JavaScriptInvoke, JavaScriptInvokeParamBlock)
             errorClusterPtr->source);
         AddCallChainToSourceIfErrorPresent(errorClusterPtr, "JavaScriptInvoke");
     }
+#endif
+
+    int x = 10;
+    emscripten_run_script("alert('Running emscripten_run_script')");
+#if false
+    x = EM_ASM_INT({
+        Module.print('I received: ' + $0);
+        return $0 + 1;
+    }, 100);
+    //emscripten_run_script("alert('hi')");
+    printf("%d\n", x);
+
+    EM_ASM(
+        Module.javaScriptInvoke.myTempJS("NI_ConcatenateValue", "Gravity: ", 10);
+    );
+#endif
+
+    char myFuncStr[] = "NI_ConcatenateValue";
+    char myArgString[] = "Gravity: ";
+    int myNumber = 10;
+
+    x = EM_ASM_INT({
+        Module.javaScriptInvoke.myTempJS("NI_ConcatenateValue", $0, $1);
+        return $1 + 1;
+    }, myArgString, myNumber);
+    printf("%d\n", x);
+
 #else
     GenerateNotSupportedOnPlatformError(errorClusterPtr, "JavaScriptInvoke");
 #endif

@@ -1,4 +1,4 @@
-describe('A JavaScript function invoke', function () {
+fdescribe('A JavaScript function invoke', function () {
     'use strict';
     // Reference aliases
     var Vireo = window.NationalInstruments.Vireo.Vireo;
@@ -22,6 +22,7 @@ describe('A JavaScript function invoke', function () {
         // Add functions to exercise JavaScriptInvoke behavior
         window.NI_ConcatenateValue = function (fieldName, value) {
             var returnString = fieldName + value;
+            console.log('window.NI_ConcatenateValue called', fieldName, value, returnString);
             return returnString;
         };
     });
