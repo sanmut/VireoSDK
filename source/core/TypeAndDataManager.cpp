@@ -91,7 +91,9 @@ void TypeManager::PrintMemoryStat(ConstCStr message, Boolean bLast) const
     if (bLast && (_totalAllocations == 1) && (_totalAQAllocated == sizeof(TypeManager))) {
         // If bLast is true then silence is success.
     } else {
+#if false  // TODO(sankara): Enable this (Delete #if) before checking in
         gPlatform.IO.Printf("LEAKS: Allocations %4d, AQCount %5zd, ShareTypes %d (%s)\n", (int)_totalAllocations, _totalAQAllocated, _typesShared, message);
+#endif
     }
 #endif
 }
@@ -818,6 +820,8 @@ Boolean TypeCommon::IsA(TypeRef otherType, Boolean compatibleStructure)
                         bMatch = true;
                 }
             }
+        } else if (thisEncoding == kEncoding_Variant && otherEncoding == kEncoding_Variant) {
+            bMatch = true;
         }
     }
 
@@ -902,7 +906,17 @@ Boolean TypeCommon::IsNumeric()
 Boolean TypeCommon::IsVariant()
 {
     TypeRef t = this;
+#if false  // TODO(sankara) Resolve one
     return t->Name().Compare(&TypeCommon::TypeVariant);
+#else
+    return t->_encoding == kEncoding_Variant;
+#endif
+}
+//------------------------------------------------------------
+Boolean TypeCommon::IsBadType()
+{
+    TypeRef t = this;
+    return t == TheTypeManager()->BadType();
 }
 //------------------------------------------------------------
 Boolean TypeCommon::IsInteger()
@@ -1251,6 +1265,13 @@ NamedType::NamedType(TypeManagerRef typeManager, const SubString* name, TypeRef 
     if (name->ComparePrefix(*tsMetaIdPrefix)) {
         _isTemplate = name->ComparePrefix(*tsMetaIdPrefix);
     }
+#if false  // TODO(sankara) Resolve this
+    // Probably not needed. May be incorrect. Only the wrapper type should be marked with _encoding of kEncoding_Variant as done in VariantType::New
+    if (name->CompareCStr(tsVariantType)) {
+        _encoding = kEncoding_Variant;
+    }
+
+#endif  // false
 }
 //------------------------------------------------------------
 // AggregateType
@@ -1764,6 +1785,10 @@ NIError ArrayType::InitData(void* pData, TypeRef pattern)
         } else if (pattern->HasCustomDefault()) {
             // The top part has been setup, now the code needs to be finished
             err = CopyData(pattern->Begin(kPARead), pData);
+            // TODO(smuthukr) Looks like CopyData is called after InitData by the caller to copy data.
+            // Calling CopyData() here affects efficiency due to double copy in most situations.
+            // This has to be analyzed further and addressed (if necessary by providing an overload or
+            // an optional boolean argument for InitData whether to call CopyData with custom default or not.
         }
     }
     return err;

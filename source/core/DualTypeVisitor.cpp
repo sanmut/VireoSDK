@@ -29,43 +29,40 @@ namespace Vireo
     bool DualTypeVisitor::TypesAreCompatible(TypeRef typeRefX, void* pDataX, TypeRef typeRefY, void* pDataY, const DualTypeOperation &operation)
     {
         bool success = false;
-        if (typeRefX->IsVariant() && typeRefY->IsVariant()) {
+
+        EncodingEnum encodingX = typeRefX->BitEncoding();
+        switch (encodingX) {
+        case kEncoding_Boolean:
+            success = operation.AreBooleanCompatible(typeRefX, typeRefY);
+            break;
+        case kEncoding_UInt:
+            success = operation.AreUIntCompatible(typeRefX, typeRefY);
+            break;
+        case kEncoding_S2CInt:
+            success = operation.AreS2CIntCompatible(typeRefX, typeRefY);
+            break;
+        case kEncoding_IEEE754Binary:
+            success = operation.AreIEEE754BinaryCompatible(typeRefX, typeRefY);
+            break;
+        case kEncoding_Cluster:
+            success = typeRefY->BitEncoding() == kEncoding_Cluster && ClusterCompatible(typeRefX, pDataX, typeRefY, pDataY, operation);
+            break;
+        case kEncoding_Enum:
+            success = EnumCompatible(typeRefX, typeRefY, operation);
+            break;
+        case kEncoding_Array: {
+            if (typeRefX->Rank() == 1 && typeRefX->GetSubElement(0)->BitEncoding() == kEncoding_Unicode) {
+                success = StringCompatible(typeRefX, typeRefY);
+            } else {
+                success = typeRefY->BitEncoding() == kEncoding_Array && ArrayCompatible(typeRefX, pDataX, typeRefY, pDataY, operation);
+            }
+            break;
+        }
+        case kEncoding_Variant:
             success = VariantCompatible(typeRefX, pDataX, typeRefY, pDataY, operation);
-        } else {
-            EncodingEnum encodingX = typeRefX->BitEncoding();
-            switch (encodingX) {
-            case kEncoding_Boolean:
-                success = operation.AreBooleanCompatible(typeRefX, typeRefY);
-                break;
-            case kEncoding_UInt:
-                success = operation.AreUIntCompatible(typeRefX, typeRefY);
-                break;
-            case kEncoding_S2CInt:
-                success = operation.AreS2CIntCompatible(typeRefX, typeRefY);
-                break;
-            case kEncoding_IEEE754Binary:
-                success = operation.AreIEEE754BinaryCompatible(typeRefX, typeRefY);
-                break;
-            case kEncoding_Cluster:
-                success = typeRefY->BitEncoding() == kEncoding_Cluster && ClusterCompatible(typeRefX, pDataX, typeRefY, pDataY, operation);
-                break;
-            case kEncoding_Enum:
-                success = EnumCompatible(typeRefX, typeRefY, operation);
-                break;
-            case kEncoding_Array: {
-                if (typeRefX->Rank() == 1 && typeRefX->GetSubElement(0)->BitEncoding() == kEncoding_Unicode) {
-                    success = StringCompatible(typeRefX, typeRefY);
-                } else {
-                    success = typeRefY->BitEncoding() == kEncoding_Array && ArrayCompatible(typeRefX, pDataX, typeRefY, pDataY, operation);
-                }
-                break;
-            }
-            case kEncoding_None:
-                success = typeRefY->BitEncoding() == kEncoding_None;  // Encountered when visiting an empty variant constants wired through SetAttribute
-                break;
-            default:
-                success = false;
-            }
+            break;
+        default:
+            success = false;
         }
         return success;
     }
@@ -73,53 +70,68 @@ namespace Vireo
     //------------------------------------------------------------
     bool DualTypeVisitor::VariantCompatible(TypeRef typeRefX, void* pDataX, TypeRef typeRefY, void* pDataY, const DualTypeOperation &operation)
     {
-        VariantTypeRef variantTypeX = reinterpret_cast<VariantTypeRef>(typeRefX);
-        VariantTypeRef variantTypeY = reinterpret_cast<VariantTypeRef>(typeRefY);
+        // TODO(sankara): Fix pDataX/pDataY so that pointer to VariantDataRef is passed and not VariantDataRef itself to be
+        // consistent with other data types similar methods can handle
+        VariantDataRef variantX = reinterpret_cast<VariantDataRef>(pDataX);
+        VariantDataRef variantY = reinterpret_cast<VariantDataRef>(pDataY);
 
-        TypeRef variantUnderlyingTypeX = variantTypeX->_underlyingTypeRef;
-        TypeRef variantUnderlyingTypeY = variantTypeY->_underlyingTypeRef;
-        bool success = false;
-        if (!variantUnderlyingTypeX && !variantUnderlyingTypeY) {
-            success = true;
-        } else if (!variantUnderlyingTypeX || !variantUnderlyingTypeY) {
+        if (!typeRefX->IsVariant() || !typeRefY->IsVariant())
             return false;
-        } else {
-            success = TypesAreCompatible(variantUnderlyingTypeX,
-                variantUnderlyingTypeX->Begin(kPARead),
-                variantUnderlyingTypeY,
-                variantUnderlyingTypeY->Begin(kPARead),
-                operation);
+
+        if (variantX->IsUninitializedVariant() && variantY->IsUninitializedVariant())
+            return true;
+
+        if (variantX->IsUninitializedVariant() != variantY->IsUninitializedVariant())
+            return false;
+
+        if ((variantX->_pUnderlyingData == nullptr) != (variantY->_pUnderlyingData == nullptr))
+            return false;
+
+        if ((variantX->_attributeMap == nullptr) != (variantY->_attributeMap == nullptr))
+            return false;
+
+        if ((variantX->_attributeMap && variantY->_attributeMap) &&
+            (variantX->_attributeMap->size() != variantY->_attributeMap->size())) {
+                return false;
         }
-        if (success) {
-            // compare attributes
-            if (!variantTypeX->_attributeMap && !variantTypeY->_attributeMap) {
-                return true;
-            } else if (variantTypeX->_attributeMap && variantTypeY->_attributeMap) {
-                if (variantTypeX->_attributeMap->size() != variantTypeY->_attributeMap->size()) {
-                    return false;
-                }
-                for (const auto attributePairInX : *variantTypeX->_attributeMap) {
-                    StringRef const attributeNameStrInX = attributePairInX.first;
-                    VariantTypeRef attributeValueInX = attributePairInX.second;
-                    auto attributePairInY = variantTypeY->_attributeMap->find(attributeNameStrInX);
-                    if (attributePairInY != variantTypeY->_attributeMap->end()) {
-                        VariantTypeRef attributeValueInY = attributePairInY->second;
-                        if (!TypesAreCompatible(attributeValueInX,
-                            attributeValueInX->Begin(kPARead),
-                            attributeValueInY,
-                            attributeValueInY->Begin(kPARead),
-                            operation)) {
-                            return false;
-                        }
-                    } else {
-                        return false;
-                    }
-                }
-            } else {
+
+        // All the inexpensive checks are done first (above)
+        // Do the expensive checks below
+
+        TypeRef underlyingTypeX = variantX->_underlyingTypeRef;
+        TypeRef underlyingTypeY = variantY->_underlyingTypeRef;
+
+        if (underlyingTypeX != nullptr && underlyingTypeY != nullptr) {
+            VIREO_ASSERT(variantX->_pUnderlyingData != nullptr && variantY->_pUnderlyingData != nullptr);
+            if (!TypesAreCompatible(underlyingTypeX,
+                variantX->_pUnderlyingData,
+                underlyingTypeY,
+                variantY->_pUnderlyingData,
+                operation)) {
                 return false;
             }
         }
-        return success;
+
+        if (variantX->_attributeMap && variantY->_attributeMap) {
+            for (const auto attributePairInX : *variantX->_attributeMap) {
+                StringRef const attributeNameStrInX = attributePairInX.first;
+                VariantDataRef attributeValueInX = attributePairInX.second;
+                auto attributePairInY = variantY->_attributeMap->find(attributeNameStrInX);
+                if (attributePairInY != variantY->_attributeMap->end()) {
+                    VariantDataRef attributeValueInY = attributePairInY->second;
+                    if (!TypesAreCompatible(attributeValueInX->Type(),
+                        attributeValueInX,
+                        attributeValueInY->Type(),
+                        attributeValueInY,
+                        operation)) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     //------------------------------------------------------------
@@ -209,27 +221,23 @@ namespace Vireo
     bool DualTypeVisitor::Apply(TypeRef typeRefX, void* pDataX, TypeRef typeRefY, void* pDataY, const DualTypeOperation &operation)
     {
         bool success = false;
-        if (typeRefX->IsVariant() && typeRefY->IsVariant()) {
-            success = ApplyVariant(typeRefX, pDataX, typeRefY, pDataY, operation);
-        } else {
-            EncodingEnum encodingX = typeRefX->BitEncoding();
-            switch (encodingX)
-            {
-            case kEncoding_Cluster:
-                success = ApplyCluster(typeRefX, pDataX, typeRefY, pDataY, operation);
-                break;
-            case kEncoding_Array:
-                if (typeRefX->Rank() == 1 && typeRefX->GetSubElement(0)->BitEncoding() == kEncoding_Unicode)
-                    success = ApplyString(typeRefX, pDataX, typeRefY, pDataY, operation);
-                else
-                    success = ApplyArray(typeRefX, pDataX, typeRefY, pDataY, operation);
-                break;
-            case kEncoding_None:
-                success = typeRefY->BitEncoding() == kEncoding_None;  // Encountered when visiting an empty variant constants wired through SetAttribute
-                break;
-            default:
-                success = operation.Apply(typeRefX, pDataX, typeRefY, pDataY);
-            }
+        EncodingEnum encodingX = typeRefX->BitEncoding();
+        switch (encodingX) {
+        case kEncoding_Cluster:
+            success = ApplyCluster(typeRefX, pDataX, typeRefY, pDataY, operation);
+            break;
+        case kEncoding_Array:
+            if (typeRefX->Rank() == 1 && typeRefX->GetSubElement(0)->BitEncoding() == kEncoding_Unicode)
+                success = ApplyString(typeRefX, pDataX, typeRefY, pDataY, operation);
+            else
+                success = ApplyArray(typeRefX, pDataX, typeRefY, pDataY, operation);
+            break;
+        case kEncoding_Variant:
+            if (typeRefY->BitEncoding() == kEncoding_Variant)
+                success = ApplyVariant(typeRefX, pDataX, typeRefY, pDataY, operation);
+            break;
+        default:
+            success = operation.Apply(typeRefX, pDataX, typeRefY, pDataY);
         }
         return success;
     }
@@ -237,44 +245,44 @@ namespace Vireo
     //------------------------------------------------------------
     bool DualTypeVisitor::ApplyVariant(TypeRef typeRefX, void* pDataX, TypeRef typeRefY, void* pDataY, const DualTypeOperation &operation)
     {
-        VariantTypeRef variantTypeX = reinterpret_cast<VariantTypeRef> (typeRefX);
-        VariantTypeRef variantTypeY = reinterpret_cast<VariantTypeRef> (typeRefY);
-        TypeRef variantUnderlyingTypeX = variantTypeX->_underlyingTypeRef;
-        TypeRef variantUnderlyingTypeY = variantTypeY->_underlyingTypeRef;
-        pDataX = typeRefX->Begin(kPARead);
-        pDataY = typeRefY->Begin(kPARead);
-        bool success = false;
-        if (!variantUnderlyingTypeX && !variantUnderlyingTypeY) {
-            success = true;
-        } else if (!variantUnderlyingTypeX || !variantUnderlyingTypeY){
-            return false;
-        } else {
-            success = Apply(variantUnderlyingTypeX, pDataX, variantUnderlyingTypeY, pDataY, operation);
-        }
-        if (success) {
-            // compare attributes
-            if (!variantTypeX->_attributeMap && !variantTypeY->_attributeMap) {
-                return true;
-            } else if (variantTypeX->_attributeMap && variantTypeY->_attributeMap) {
-                // TODO(siddhukrs) - since attribute maps are ordered, we can compare them in a single loop for efficiency
-                for (const auto attributePairInX : *variantTypeX->_attributeMap) {
-                    StringRef const attributeNameInX = attributePairInX.first;
-                    VariantTypeRef attributeValueInX = attributePairInX.second;
-                    auto attributePairInY = variantTypeY->_attributeMap->find(attributeNameInX);
-                    VariantTypeRef attributeValueInY = attributePairInY->second;
-                    if (!Apply(attributeValueInX,
-                        attributeValueInX->Begin(kPARead),
-                        attributeValueInY,
-                        attributeValueInY->Begin(kPARead),
-                        operation)) {
-                        return false;
-                    }
-                }
-            } else {
+        auto variantX = reinterpret_cast<VariantDataRef>(pDataX);
+        auto variantY = reinterpret_cast<VariantDataRef>(pDataY);
+
+        TypeRef underlyingTypeX = variantX->_underlyingTypeRef;
+        TypeRef underlyingTypeY = variantY->_underlyingTypeRef;
+
+        if (underlyingTypeX != nullptr && underlyingTypeY != nullptr) {
+            VIREO_ASSERT(variantX->_pUnderlyingData != nullptr && variantY->_pUnderlyingData != nullptr);
+            if (!Apply(underlyingTypeX,
+                variantX->_pUnderlyingData,
+                underlyingTypeY,
+                variantY->_pUnderlyingData,
+                operation)) {
                 return false;
             }
         }
-        return success;
+
+        if (variantX->_attributeMap && variantY->_attributeMap) {
+            // TODO(siddhukrs) - since attribute maps are ordered, we can compare them in a single loop for efficiency
+            for (const auto attributePairInX : *variantX->_attributeMap) {
+                StringRef const attributeNameStrInX = attributePairInX.first;
+                VariantDataRef attributeValueInX = attributePairInX.second;
+                auto attributePairInY = variantY->_attributeMap->find(attributeNameStrInX);
+                if (attributePairInY != variantY->_attributeMap->end()) {
+                    VariantDataRef attributeValueInY = attributePairInY->second;
+                    if (!Apply(attributeValueInX->Type(),
+                        attributeValueInX,
+                        attributeValueInY->Type(),
+                        attributeValueInY,
+                        operation)) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     //------------------------------------------------------------
