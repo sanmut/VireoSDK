@@ -72,8 +72,8 @@ namespace Vireo
     {
         // TODO(sankara): Fix pDataX/pDataY so that pointer to VariantDataRef is passed and not VariantDataRef itself to be
         // consistent with other data types similar methods can handle
-        VariantDataRef variantX = reinterpret_cast<VariantDataRef>(pDataX);
-        VariantDataRef variantY = reinterpret_cast<VariantDataRef>(pDataY);
+        VariantDataRef variantX = *reinterpret_cast<VariantDataRef *>(pDataX);
+        VariantDataRef variantY = *reinterpret_cast<VariantDataRef *>(pDataY);
 
         if (!typeRefX->IsVariant() || !typeRefY->IsVariant())
             return false;
@@ -120,9 +120,9 @@ namespace Vireo
                 if (attributePairInY != variantY->_attributeMap->end()) {
                     VariantDataRef attributeValueInY = attributePairInY->second;
                     if (!TypesAreCompatible(attributeValueInX->Type(),
-                        attributeValueInX,
+                        &attributeValueInX,
                         attributeValueInY->Type(),
-                        attributeValueInY,
+                        &attributeValueInY,
                         operation)) {
                         return false;
                     }
@@ -245,8 +245,8 @@ namespace Vireo
     //------------------------------------------------------------
     bool DualTypeVisitor::ApplyVariant(TypeRef typeRefX, void* pDataX, TypeRef typeRefY, void* pDataY, const DualTypeOperation &operation)
     {
-        auto variantX = reinterpret_cast<VariantDataRef>(pDataX);
-        auto variantY = reinterpret_cast<VariantDataRef>(pDataY);
+        auto variantX = *reinterpret_cast<VariantDataRef *>(pDataX);
+        auto variantY = *reinterpret_cast<VariantDataRef *>(pDataY);
 
         TypeRef underlyingTypeX = variantX->_underlyingTypeRef;
         TypeRef underlyingTypeY = variantY->_underlyingTypeRef;
@@ -271,9 +271,9 @@ namespace Vireo
                 if (attributePairInY != variantY->_attributeMap->end()) {
                     VariantDataRef attributeValueInY = attributePairInY->second;
                     if (!Apply(attributeValueInX->Type(),
-                        attributeValueInX,
+                        &attributeValueInX,
                         attributeValueInY->Type(),
-                        attributeValueInY,
+                        &attributeValueInY,
                         operation)) {
                         return false;
                     }

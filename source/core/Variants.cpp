@@ -745,7 +745,7 @@ bool VariantsAreEqual(VariantDataRef variantX, VariantDataRef variantY)
     if (variantX->IsUninitializedVariant() != variantY->IsUninitializedVariant())
         return false;
 
-    return visitor.Visit(variantX->Type(), variantX, variantY->Type(), variantY, dualTypeEqual);
+    return visitor.Visit(variantX->Type(), &variantX, variantY->Type(), &variantY, dualTypeEqual);
 }
 
 VIREO_FUNCTION_SIGNATURET(IsEQVariant, VariantComparisonParamBlock) {
