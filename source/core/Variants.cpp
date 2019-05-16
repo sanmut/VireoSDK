@@ -89,7 +89,7 @@ NIError VariantType::CopyData(const void* pData, void* pDataCopy)
 #if true  // TODO(sankara) This seems more correct.
     if (pDest && !pDest->IsUninitializedVariant()) {
         ClearData(pDataCopy);
-}
+    }
     InitData(pDataCopy, pSource->Type());
 #else
     if (pDest && !pDest->IsVoidVariant()) {
@@ -192,7 +192,11 @@ bool VariantData::SetAttribute(StringRef name, const StaticTypeAndData& value)
 #else
     VariantDataRef variantValue = CreateNewVariant(_typeRef);
 #endif
-    variantValue->InitializeFromStaticTypeAndData(value);
+    if (value._paramType->IsVariant()) {
+        value._paramType->CopyData(value._pData, &variantValue);
+    } else {
+        variantValue->InitializeFromStaticTypeAndData(value);
+    }
 
     StringRef nameKeyRef = nullptr;
     TypeRef stringType = tm->FindType("String");
@@ -250,8 +254,12 @@ bool VariantData::GetVariantAttributeAll(TypedArrayCoreRef names, TypedArrayCore
                     pNamesInsert += namesAQSize;
                 }
                 if (values) {
+#if false
                     VariantDataRef newVariant = VariantData::CreateNewVariantFromVariant(attributeValue);
                     *reinterpret_cast<VariantDataRef *>(pValuesInsert) = newVariant;
+#else
+                    attributeValue->Type()->CopyData(&attributeValue, pValuesInsert);
+#endif
                     pValuesInsert += valuesAQSize;
                 }
             }
@@ -351,8 +359,13 @@ void VariantData::Copy(VariantDataRef pDest) const
             nameKeyRef->Append(attribute.first->Length(), attribute.first->Begin());
 
             VariantDataRef attributeValueVariant = attribute.second;
+
+#if false
             (*attributeMapOutput)[nameKeyRef] = CreateNewVariantFromVariant(attributeValueVariant);  // TODO(sankara) Call InitData and CopyData
-                                                                                                      // to create a new variant from a variant?
+                                                                                                     // to create a new variant from a variant?
+#else
+            attributeValueVariant->Type()->CopyData(&attributeValueVariant, &(*attributeMapOutput)[nameKeyRef]);
+#endif
         }
         pDest->_attributeMap = attributeMapOutput;
     }

@@ -91,9 +91,7 @@ void TypeManager::PrintMemoryStat(ConstCStr message, Boolean bLast) const
     if (bLast && (_totalAllocations == 1) && (_totalAQAllocated == sizeof(TypeManager))) {
         // If bLast is true then silence is success.
     } else {
-#if false  // TODO(sankara): Enable this (Delete #if) before checking in
         gPlatform.IO.Printf("LEAKS: Allocations %4d, AQCount %5zd, ShareTypes %d (%s)\n", (int)_totalAllocations, _totalAQAllocated, _typesShared, message);
-#endif
     }
 #endif
 }

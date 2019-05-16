@@ -32,6 +32,7 @@ class VariantType : public TypeCommon
  public:
     static VariantTypeRef New(TypeManagerRef typeManager, TypeRef type);
     static void SetVariantToDataTypeError(TypeRef inputType, TypeRef targetType, TypeRef outputType, void* outputData, ErrorCluster* errPtr);
+    void* Begin(PointerAccessEnum) override { VIREO_ASSERT(false); return nullptr; } // TODO-san Delete if no error
     NIError InitData(void* pData, TypeRef pattern = nullptr) override;
     NIError CopyData(const void* pData, void* pDataCopy) override;
     NIError ClearData(void* pData) override;
