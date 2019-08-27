@@ -450,7 +450,8 @@
                 "WaveformAnalogBuildMissingArgs.via",
                 "WildcardArguments.via",
                 "WildCardArgumentsSubVICalls.via",
-                "ZDACrash1.via"
+                "ZDACrash1.via",
+                "ScanFromString.via"
             ]
         }
     }
